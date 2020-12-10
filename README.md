@@ -20,3 +20,5 @@ Then place mastodon-data-viewer.py in your extracted mastodon data directory (th
 ## Screenshot
 
 ![Screenshot](screenshot.png?raw=true)
+
+![Screenshot (Dark Mode)](screenshot_dark.png?raw=true)
