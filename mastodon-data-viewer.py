@@ -9,6 +9,7 @@ import http.server
 import socketserver
 from urllib.parse import urlparse
 from urllib.parse import parse_qs
+import threading
 
 # todo: polls
 
@@ -322,10 +323,13 @@ def main():
 				return
 			return http.server.SimpleHTTPRequestHandler.do_GET(self)
 
+	class ThreadingSimpleServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+		pass
+
 	PORT = 8000
 	print("port:",PORT)
 	socketserver.TCPServer.allow_reuse_address = True
-	server = socketserver.TCPServer(("", PORT), MyHttpRequestHandler)
+	server = ThreadingSimpleServer(("", PORT), MyHttpRequestHandler)
 	server.serve_forever()
 
 if __name__ == "__main__":
