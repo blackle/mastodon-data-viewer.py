@@ -444,7 +444,8 @@ def main():
 				titleBox = """<div class="toot box"><h1>%s</h1></div>\n""" % dateparsed.strftime("%B %Y")
 				self.wfile.write(titleBox.encode('utf8'))
 				self.wfile.write(months_to_html(monthly, date, darkmode, query_components).encode('utf8'))
-				toots_to_html(monthly[date], actor, self.wfile)
+				if date in monthly:
+					toots_to_html(monthly[date], actor, self.wfile)
 
 				self.wfile.write(TEMPLATE_END.encode('utf8'))
 				return
