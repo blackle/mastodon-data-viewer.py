@@ -192,6 +192,13 @@ audio.image {
     font-size: 12px;
     color: #555;
 }
+
+.cw {
+	margin: 10px 0px;
+}
+.cw p {
+	margin-top: 0px;
+}
 </style>
 </head>
 <body>"""
@@ -292,10 +299,14 @@ def toots_to_html(toots, actor, file):
 
 		date = dateutil.parser.isoparse(toot["published"])
 		postdate = date.astimezone().strftime("%a, %d %b %Y %I:%M:%S %p")
-		content = toot["content"] + images + poll
+		attachments = images + poll
+		content = toot["content"] + attachments
 		summary = toot["summary"]
 		if toot["sensitive"]:
-			content =  """<p>%(summary)s <button onclick="this.parentNode.nextElementSibling.classList.toggle('hidden');" class="showmore">show more</button></p>
+			if summary is None:
+				summary = toot["content"]
+				content = attachments
+			content = """<div class="cw">%(summary)s <button onclick="this.parentNode.nextElementSibling.classList.toggle('hidden');" class="showmore">show more</button></div>
 <div class="collapsible hidden">
 %(content)s
 </div>""" % vars()
