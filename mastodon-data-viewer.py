@@ -9,6 +9,7 @@ import http.server
 import socketserver
 from urllib.parse import urlparse
 from urllib.parse import parse_qs
+from urllib.parse import urlencode
 import threading
 
 LINK_ICON = """<svg xmlns="http://www.w3.org/2000/svg" width="16.25" height="16.495" viewBox="0 0 4.3 4.364"><path d="M4.298.028L2.74.492l.43.368-2.039 2.1.395.373 2.002-2.105.393.382zM1.273.18A1.277 1.277 0 000 1.454V3.09c.002.702.57 1.271 1.273 1.273h1.674A1.277 1.277 0 004.22 3.091V1.944h-.544V3.09a.72.72 0 01-.73.729H1.274a.72.72 0 01-.728-.729V1.454a.72.72 0 01.728-.728h1.281V.18z" color="#000"/></svg>"""
@@ -136,12 +137,7 @@ h1 {
   overflow-wrap: anywhere;
 }
 
-span.at {
-  color: #555;
-}
-
 span.postdate {
-  color: #555;
 	font-size: 11px;
 }
 
@@ -207,7 +203,44 @@ audio.image {
 .pollmeta {
     text-align: right;
     font-size: 12px;
-    color: #555;
+}
+
+.pollmeta, span.at, span.postdate {
+	color: #555;
+}
+
+body.dark {
+	color: #EEE;
+	background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC4AAAAuAgMAAAAq18OkAAAACVBMVEUkBgxQJB8dOj6dMmyXAAAAe0lEQVR4AWNkY/nGwMrA8JuB6/93RrGGOgZGB4b9DEz1uxlFJyQwMAQwbGBgWDCbcZrIDQYWAYY3DBwK1xiXIevRQujZziiF0DMNRQ+qPUwIPfsZBRB6FjCKIPTcoK4eVP+EIvRcZwzDFQbU1TPwYYASP+TEKVoY4LIHAMTQoQ+1yn7bAAAAAElFTkSuQmCC');
+  background-attachment: fixed;
+}
+
+body.dark .box {
+	background: #1f1d1d
+}
+
+body.dark a {
+	color: lightblue;
+}
+
+body.dark .icon {
+	filter: invert();
+}
+
+body.dark .fill {
+  background: #af4f44;
+}
+
+body.dark .monthbar, body.dark .pollbar {
+	background: #463d3c;
+}
+
+body.dark .monthbar.selected {
+	border: 2px solid #BBB;
+}
+
+body.dark .pollmeta, body.dark span.at, body.dark span.postdate {
+	color: #AAA;
 }
 
 .cw {
@@ -217,14 +250,13 @@ audio.image {
 	margin-top: 0px;
 }
 </style>
-</head>
-<body>"""
+</head>"""
 
 TEMPLATE_END = """</body>
 </html>
 """
 
-def months_to_html(monthly, selected):
+def months_to_html(monthly, selected, darkmode, query_components):
 	monthkeys = sorted(monthly.keys())
 	maximum = max([len(monthly[date]) for date in monthkeys])
 	start = datetime.datetime.strptime(monthkeys[0], "%Y-%m-%d")
@@ -239,8 +271,11 @@ def months_to_html(monthly, selected):
 			percent = 100 - count/maximum * 100
 			monthname = parseddate.strftime("%B")
 			selectedclass = "selected" if selected == date else ""
+			query_copy = query_components.copy()
+			query_copy["date"] = [date]
+			url = "/?" + urlencode(query_copy, doseq=True)
 			months += """<div class="month">
-<a title="%(monthname)s" href="/?date=%(date)s" class="monthbar %(selectedclass)s">
+<a title="%(monthname)s" href="%(url)s" class="monthbar %(selectedclass)s">
 <div class="fill" style="top:%(percent)d%%;"></div>
 </a>
 %(count)d
@@ -252,6 +287,13 @@ def months_to_html(monthly, selected):
 %(months)s
 </div>
 </div>""" % vars()
+
+	query_copy = query_components.copy()
+	query_copy["dark"] = ["no"] if darkmode else ["yes"]
+	themename = "light mode" if darkmode else "dark mode"
+	themeurl = "/?" + urlencode(query_copy, doseq=True)
+
+	years += """<a href="%(themeurl)s">%(themename)s</a>""" % vars()
 
 	return """<div class="dates box">%s</div>""" % years
 
@@ -388,16 +430,21 @@ def main():
 				self.end_headers()
 				date = monthkeys[-1]
 				query_components = parse_qs(parsedpath.query)
+				darkmode = "dark" in query_components and query_components["dark"][0] == "yes"
+				print(query_components)
+				bodytag = "<body>"
+				if darkmode:
+					bodytag = "<body class=\"dark\">"
 				if "date" in query_components:
 					date = query_components["date"][0]
 				dateparsed = datetime.datetime.strptime(date, "%Y-%m-%d")
 
 				self.wfile.write(TEMPLATE_START.encode('utf8'))
+				self.wfile.write(bodytag.encode('utf8'))
 				titleBox = """<div class="toot box"><h1>%s</h1></div>\n""" % dateparsed.strftime("%B %Y")
 				self.wfile.write(titleBox.encode('utf8'))
-				self.wfile.write(months_to_html(monthly, date).encode('utf8'))
+				self.wfile.write(months_to_html(monthly, date, darkmode, query_components).encode('utf8'))
 				toots_to_html(monthly[date], actor, self.wfile)
-				body = TEMPLATE % {"body": body}
 
 				self.wfile.write(TEMPLATE_END.encode('utf8'))
 				return
