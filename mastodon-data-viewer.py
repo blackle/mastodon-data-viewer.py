@@ -11,8 +11,6 @@ from urllib.parse import urlparse
 from urllib.parse import parse_qs
 import threading
 
-# todo: polls
-
 LINK_ICON = """<svg xmlns="http://www.w3.org/2000/svg" width="16.25" height="16.495" viewBox="0 0 4.3 4.364"><path d="M4.298.028L2.74.492l.43.368-2.039 2.1.395.373 2.002-2.105.393.382zM1.273.18A1.277 1.277 0 000 1.454V3.09c.002.702.57 1.271 1.273 1.273h1.674A1.277 1.277 0 004.22 3.091V1.944h-.544V3.09a.72.72 0 01-.73.729H1.274a.72.72 0 01-.728-.729V1.454a.72.72 0 01.728-.728h1.281V.18z" color="#000"/></svg>"""
 
 DM_ICON = """<svg xmlns="http://www.w3.org/2000/svg" width="16.25" height="16.495" viewBox="0 0 4.3 4.364"><path d="M1.02.31a.921.921 0 00-.876.666l1.999 1.155L4.172.958A.922.922 0 003.3.31H1.02zm3.198 1.202L2.143 2.711.103 1.533v1.602c0 .502.415.916.918.916H3.3a.922.922 0 00.917-.916V1.512z" color="#000"/></svg>"""
