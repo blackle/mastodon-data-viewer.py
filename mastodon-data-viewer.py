@@ -19,7 +19,7 @@ DM_ICON = """<svg xmlns="http://www.w3.org/2000/svg" width="16.25" height="16.49
 
 REPLY_ICON = """<svg xmlns="http://www.w3.org/2000/svg" width="16.25" height="16.495" viewBox="0 0 4.3 4.364"><path d="M2.089 2.789v-.725c2.434 0-.28 1.516-1.519 1.97 2.26 0 6.146-3.08 1.519-3.08V.26L.136 1.47z"/></svg>"""
 
-TEMPLATE = """
+TEMPLATE_START = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -174,19 +174,29 @@ audio.image {
 	float: right;
 	margin-left: 5px;
 }
+
+.pollbar {
+    position: relative;
+    height: 20px;
+    background: #d1f1eb;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.pollitem {
+    margin-bottom: 15px;
+}
+
+.pollmeta {
+    text-align: right;
+    font-size: 12px;
+    color: #555;
+}
 </style>
 </head>
-<body>
-%(body)s
-<script>
-var buttons = document.querySelectorAll("button.showmore")
-Array.prototype.forEach.call(buttons, function(button) {
-    button.onclick = function() {
-        button.parentNode.nextElementSibling.classList.toggle('hidden');
-    }
-});
-</script>
-</body>
+<body>"""
+
+TEMPLATE_END = """</body>
 </html>
 """
 
@@ -203,70 +213,110 @@ def months_to_html(monthly, selected):
 			parseddate = datetime.datetime.strptime(date, "%Y-%m-%d")
 			count = len(monthly[date])
 			percent = 100 - count/maximum * 100
+			monthname = parseddate.strftime("%B")
 			selectedclass = "selected" if selected == date else ""
 			months += """<div class="month">
-<a title="%(monthname)s" href="/?date=%(date)s" class="monthbar %(selected)s">
+<a title="%(monthname)s" href="/?date=%(date)s" class="monthbar %(selectedclass)s">
 <div class="fill" style="top:%(percent)d%%;"></div>
 </a>
 %(count)d
-</div>""" % {"monthname": parseddate.strftime("%B"), "date": date, "count": count, "percent": percent, "selected": selectedclass}
+</div>""" % vars()
 
 		years += """<div class="year">
 <span class="title">%(year)d</span>
 <div class="months">
 %(months)s
 </div>
-</div>""" % {"year": year, "months": months}
+</div>""" % vars()
 
 	return """<div class="dates box">%s</div>""" % years
 
-def toots_to_html(toots, actor):
+def poll_to_html(toot):
+	pollobj = None
+	polltype = ""
+	if "anyOf" in toot:
+		pollobj = toot["anyOf"]
+		polltype = "multiple choice"
+	if "oneOf" in toot:
+		pollobj = toot["oneOf"]
+		polltype = "single choice"
+	if pollobj is None:
+		return ""
+
+	poll = ""
+
+	voteCount = 0
+	for pollitem in pollobj:
+		voteCount += pollitem["replies"]["totalItems"]
+
+	for pollitem in pollobj:
+		polltext = pollitem["name"]
+		count = pollitem["replies"]["totalItems"]
+		percent = count / voteCount * 100
+		barsize = 100 - percent
+		poll += """<div class="pollitem"><div class="pollbar"><div class="fill" style="right:%(barsize)d%%"></div></div><span class="polltext">%(polltext)s <span class="pollmeta">(%(count)d votes, %(percent)d%%)</span></span></div>""" % vars()
+
+	end = dateutil.parser.isoparse(toot["endTime"])
+	endtime = end.astimezone().strftime("%a, %d %b %Y %I:%M:%S %p")
+	poll += """<div class="pollmeta">%(polltype)s poll. %(voteCount)d votes, ended %(endtime)s</div>""" % vars()
+	return """<div class="poll box">%s</div>""" % poll
+
+def attachments_to_html(toot):
+	images = ""
+	for attachment in toot["attachment"]:
+		alt = attachment["name"]
+		if alt is None:
+			alt = ""
+		alt = alt.replace("\"", "&quot;")
+		mediaType = attachment["mediaType"]
+		href = attachment["url"]
+		if mediaType.startswith("video"):
+			images += """<video controls class="image" title="%(alt)s"><source src="%(href)s" type="%(mediaType)s"></video>""" % vars()
+		elif mediaType.startswith("audio"):
+			images += """<audio controls class="image" title="%(alt)s"><source src="%(href)s" type="%(mediaType)s"></audio>""" % vars()
+		else:
+			images += """<a alt="%(alt)s" title="%(alt)s" class="image" href="%(href)s" target="_blank" style="background: url('%(href)s')" ></a>""" % vars()
+	if images != "":
+			images = """<div class="images">%s</div>""" % images
+	return images
+
+def toots_to_html(toots, actor, file):
 	toots.sort(reverse=True, key=lambda toot: toot["published"])
-	lines = ""
+	avatar = actor["icon"]["url"]
+	name = actor["name"]
+	username = actor["preferredUsername"]
 	for toot in toots:
-		images = ""
-		for attachment in toot["attachment"]:
-			name = attachment["name"]
-			if name is None:
-				name = ""
-			name = name.replace("\"", "&quot;")
-			if attachment["mediaType"].startswith("video"):
-				images += """<video controls class="image" title="%(alt)s"><source src="%(href)s" type="%(type)s"></video>""" % {"data": str(attachment), "href": attachment["url"], "type": attachment["mediaType"], "alt": name}
-			elif attachment["mediaType"].startswith("audio"):
-				images += """<audio controls class="image" title="%(alt)s"><source src="%(href)s" type="%(type)s"></audio>""" % {"data": str(attachment), "href": attachment["url"], "type": attachment["mediaType"], "alt": name}
-			else:
-				images += """<a alt="%(alt)s" title="%(alt)s" class="image" href="%(href)s" target="_blank" style="background: url('%(href)s')" ></a>""" % {"href": attachment["url"], "alt": name}
+		datastr = str(toot)
+		poll = poll_to_html(toot)
+		images = attachments_to_html(toot)
+
 		date = dateutil.parser.isoparse(toot["published"])
 		postdate = date.astimezone().strftime("%a, %d %b %Y %I:%M:%S %p")
-		content =  """%(content)s
-<div class="images">
-%(images)s
-</div>""" % {"content": toot["content"], "images": images}
+		content = toot["content"] + images + poll
+		summary = toot["summary"]
 		if toot["sensitive"]:
-			content =  """<p>%(summary)s <button class="showmore">show more</button></p>
+			content =  """<p>%(summary)s <button onclick="this.parentNode.nextElementSibling.classList.toggle('hidden');" class="showmore">show more</button></p>
 <div class="collapsible hidden">
 %(content)s
-</div>""" % {"summary": toot["summary"], "content": content}
+</div>""" % vars()
 
 		icons = """<a class="icon" href="%(url)s" target="_blank">%(icon)s</a>""" % {"url": toot["url"], "icon": LINK_ICON}
 		if "directMessage" in toot and toot["directMessage"]:
 			icons += """<a class="icon" title="direct message">%s</a>""" % DM_ICON
 		if "inReplyTo" in toot and toot["inReplyTo"] is not None:
 			icons += """<a class="icon" title="reply">%s</a>""" % REPLY_ICON
-		line = """<div class="toot box"><!-- %(data)s -->
+		line = """<div class="toot box"><!-- %(datastr)s -->
 <div class="avatar">
 <img class="avatar" src="%(avatar)s" />
 </div>
 <div class="content">
 %(icons)s
-<b>%(name)s</b> <span class="at">@%(preferred)s</span><br/>
+<b>%(name)s</b> <span class="at">@%(username)s</span><br/>
 <span class="postdate">%(postdate)s</span>
 %(content)s
 </div>
-</div>""" % {"data": str(toot), "content": content, "postdate": postdate, "icons": icons, "avatar": actor["icon"]["url"], "name": actor["name"], "preferred": actor["preferredUsername"]}
-		lines += line
-		# file.write(line.encode('utf8'))
-	return lines
+</div>""" % vars()
+		file.write(line.encode('utf8'))
 
 def load_toots(actor):
 	toots = {}
@@ -314,12 +364,14 @@ def main():
 					date = query_components["date"][0]
 				dateparsed = datetime.datetime.strptime(date, "%Y-%m-%d")
 
-				body = months_to_html(monthly, date)
-				body += """<div class="toot box"><h1>%s</h1></div>\n""" % dateparsed.strftime("%B %Y")
-				body += toots_to_html(monthly[date], actor)
+				self.wfile.write(TEMPLATE_START.encode('utf8'))
+				self.wfile.write(months_to_html(monthly, date).encode('utf8'))
+				titleBox = """<div class="toot box"><h1>%s</h1></div>\n""" % dateparsed.strftime("%B %Y")
+				self.wfile.write(titleBox.encode('utf8'))
+				toots_to_html(monthly[date], actor, self.wfile)
 				body = TEMPLATE % {"body": body}
 
-				self.wfile.write(body.encode('utf8'))
+				self.wfile.write(TEMPLATE_END.encode('utf8'))
 				return
 			return http.server.SimpleHTTPRequestHandler.do_GET(self)
 
