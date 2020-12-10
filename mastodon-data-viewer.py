@@ -236,7 +236,7 @@ def toots_to_html(toots, actor):
 			else:
 				images += """<a alt="%(alt)s" title="%(alt)s" class="image" href="%(href)s" target="_blank" style="background: url('%(href)s')" ></a>""" % {"href": attachment["url"], "alt": name}
 		date = dateutil.parser.isoparse(toot["published"])
-		postdate = date.strftime("%a, %d %b %Y %I:%M:%S %p")
+		postdate = date.astimezone().strftime("%a, %d %b %Y %I:%M:%S %p")
 		content =  """%(content)s
 <div class="images">
 %(images)s
@@ -322,8 +322,9 @@ def main():
 				return
 			return http.server.SimpleHTTPRequestHandler.do_GET(self)
 
-	PORT = 8003
+	PORT = 8000
 	print("port:",PORT)
+	socketserver.TCPServer.allow_reuse_address = True
 	server = socketserver.TCPServer(("", PORT), MyHttpRequestHandler)
 	server.serve_forever()
 
