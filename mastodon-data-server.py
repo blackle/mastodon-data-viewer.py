@@ -11,7 +11,6 @@ from urllib.parse import urlparse
 from urllib.parse import parse_qs
 
 # todo: polls
-# todo: better link icon
 
 LINK_ICON = """<svg xmlns="http://www.w3.org/2000/svg" width="16.25" height="16.495" viewBox="0 0 4.3 4.364"><path d="M4.3 0L3.016.383l.29.273L1.132 2.96l.395.373 2.173-2.301.29.273zM1.273.18A1.277 1.277 0 000 1.454V3.09a1.276 1.276 0 001.273 1.273h1.674A1.277 1.277 0 004.22 3.091V1.944h-.544V3.09a.72.72 0 01-.73.729H1.274a.72.72 0 01-.728-.729V1.454a.72.72 0 01.728-.728h1.281V.18H1.273z" color="#555"/></svg>"""
 
@@ -20,9 +19,11 @@ DM_ICON = """<svg xmlns="http://www.w3.org/2000/svg" width="16.25" height="16.49
 REPLY_ICON = """<svg xmlns="http://www.w3.org/2000/svg" width="16.25" height="16.495" viewBox="0 0 4.3 4.364"><path d="M2.089 2.789v-.725c2.434 0-.28 1.516-1.519 1.97 2.26 0 6.146-3.08 1.519-3.08V.26L.136 1.47z"/></svg>"""
 
 TEMPLATE = """
+<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
+<title>mastodon-data-viewer.py</title>
 <style>
 body {
   background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC4AAAAuAgMAAAAq18OkAAAACVBMVEXE9OuFxMzPo53j2hi5AAAAe0lEQVR4AWNkY/nGwMrA8JuB6/93RrGGOgZGB4b9DEz1uxlFJyQwMAQwbGBgWDCbcZrIDQYWAYY3DBwK1xiXIevRQujZziiF0DMNRQ+qPUwIPfsZBRB6FjCKIPTcoK4eVP+EIvRcZwzDFQbU1TPwYYASP+TEKVoY4LIHAMTQoQ+1yn7bAAAAAElFTkSuQmCC');
@@ -218,18 +219,22 @@ def months_to_html(monthly, selected):
 
 	return """<div class="dates box">%s</div>""" % years
 
-def toots_to_html(toots):
+def toots_to_html(toots, actor):
 	toots.sort(reverse=True, key=lambda toot: toot["published"])
 	lines = ""
 	for toot in toots:
 		images = ""
 		for attachment in toot["attachment"]:
+			name = attachment["name"]
+			if name is None:
+				name = ""
+			name = name.replace("\"", "&quot;")
 			if attachment["mediaType"].startswith("video"):
-				images += """<video controls class="image"><source src="%(href)s" type="%(type)s"></video>""" % {"data": str(attachment), "href": attachment["url"], "type": attachment["mediaType"]}
+				images += """<video controls class="image" title="%(alt)s"><source src="%(href)s" type="%(type)s"></video>""" % {"data": str(attachment), "href": attachment["url"], "type": attachment["mediaType"], "alt": name}
 			elif attachment["mediaType"].startswith("audio"):
-				images += """<audio controls class="image"><source src="%(href)s" type="%(type)s"></audio>""" % {"data": str(attachment), "href": attachment["url"], "type": attachment["mediaType"]}
+				images += """<audio controls class="image" title="%(alt)s"><source src="%(href)s" type="%(type)s"></audio>""" % {"data": str(attachment), "href": attachment["url"], "type": attachment["mediaType"], "alt": name}
 			else:
-				images += """<a alt="bep" title="bep" class="image" href="%(href)s" target="_blank" style="background: url('%(href)s')" ></a>""" % {"href": attachment["url"]}
+				images += """<a alt="%(alt)s" title="%(alt)s" class="image" href="%(href)s" target="_blank" style="background: url('%(href)s')" ></a>""" % {"href": attachment["url"], "alt": name}
 		date = dateutil.parser.isoparse(toot["published"])
 		postdate = date.strftime("%a, %d %b %Y %I:%M:%S %p")
 		content =  """%(content)s
@@ -249,22 +254,22 @@ def toots_to_html(toots):
 			icons += """<a class="icon" title="reply">%s</a>""" % REPLY_ICON
 		line = """<div class="toot box"><!-- %(data)s -->
 <div class="avatar">
-<img class="avatar" src="./avatar.png" />
+<img class="avatar" src="%(avatar)s" />
 </div>
 <div class="content">
 %(icons)s
-<b>talkative fishy</b> <span class="at">@blackle</span><br/>
+<b>%(name)s</b> <span class="at">@%(preferred)s</span><br/>
 <span class="postdate">%(postdate)s</span>
 %(content)s
 </div>
-</div>""" % {"data": str(toot), "content": content, "postdate": postdate, "icons": icons}
+</div>""" % {"data": str(toot), "content": content, "postdate": postdate, "icons": icons, "avatar": actor["icon"]["url"], "name": actor["name"], "preferred": actor["preferredUsername"]}
 		lines += line
 		# file.write(line.encode('utf8'))
 	return lines
 
-def load_toots():
+def load_toots(actor):
 	toots = {}
-	with open('outbox.json', 'rb') as f:
+	with open(actor["outbox"], 'rb') as f:
 		j = bigjson.load(f)
 		totalItems = j["totalItems"]
 		allItems = j["orderedItems"]
@@ -279,17 +284,21 @@ def load_toots():
 	return toots
 
 def main():
+	with open('actor.json', 'rb') as f:
+		j = bigjson.load(f)
+		actor = j.to_python()
 
 	try:
 		toots = pickle.load(open("toots.pk", "rb"))
 	except:
-		toots = load_toots()
+		toots = load_toots(actor)
 	monthly = defaultdict(list)
 	# bin the toots into months
 	for key, toot in toots.items():
 		date = dateutil.parser.isoparse(toot["published"])
 		date = datetime.date(year=date.year, month=date.month, day=1)
 		monthly[str(date)].append(toot)
+	monthkeys = sorted(monthly.keys())
 
 	class MyHttpRequestHandler(http.server.SimpleHTTPRequestHandler):
 		def do_GET(self):
@@ -298,8 +307,7 @@ def main():
 				self.send_response(200)
 				self.send_header("Content-type", "text/html")
 				self.end_headers()
-				monthkeys = sorted(monthly.keys())
-				date = monthkeys[0]
+				date = monthkeys[-1]
 				query_components = parse_qs(parsedpath.query)
 				if "date" in query_components:
 					date = query_components["date"][0]
@@ -307,14 +315,14 @@ def main():
 
 				body = months_to_html(monthly, date)
 				body += """<div class="toot box"><h1>%s</h1></div>\n""" % dateparsed.strftime("%B %Y")
-				body += toots_to_html(monthly[date])
+				body += toots_to_html(monthly[date], actor)
 				body = TEMPLATE % {"body": body}
 
 				self.wfile.write(body.encode('utf8'))
 				return
 			return http.server.SimpleHTTPRequestHandler.do_GET(self)
 
-	PORT = 8001
+	PORT = 8003
 	print("port:",PORT)
 	server = socketserver.TCPServer(("", PORT), MyHttpRequestHandler)
 	server.serve_forever()
