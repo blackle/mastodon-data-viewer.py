@@ -24,6 +24,7 @@ TEMPLATE_START = """
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>mastodon-data-viewer.py</title>
 <style>
 body {
@@ -42,14 +43,16 @@ body {
 
 h1 {
 	text-align: center;
-	width: 100%%;
+	width: 100%;
 }
 
 .dates {
-  width: 400px;
+  width: 450px;
+	max-width: 100%;
   position: fixed;
   top: 10px;
   right: 10px;
+  box-sizing: border-box;
 }
 
 .year {
@@ -69,6 +72,7 @@ h1 {
 }
 
 .month {
+	overflow:hidden;
   margin-right: 2px;
   text-align: center;
   font-size: 12px;
@@ -105,12 +109,27 @@ h1 {
 }
 
 .toot {
-  width: 600px;
+  max-width: 650px;
+  width: 100%;
   margin: 20px auto 20px auto;
+  box-sizing: border-box;
   
   display: flex;
   flex-wrap: nowrap;
   align-items: flex-start;
+}
+
+@media (max-width: 1600px) {
+	.dates {
+		position: initial;
+	  margin: 20px auto 20px auto;
+	}
+}
+
+@media (max-width: 800px) {
+	.toot {
+  	max-width: 800px;
+	}
 }
 
 .content {
@@ -153,12 +172,12 @@ img.avatar {
 video.image {
 	height: auto;
 	max-height: 600px;
-	width: 100%%;
+	width: 100%;
 }
 
 audio.image {
 	height: 50px;
-	width: 100%%;
+	width: 100%;
 	border: none;
 }
 
@@ -376,9 +395,9 @@ def main():
 				dateparsed = datetime.datetime.strptime(date, "%Y-%m-%d")
 
 				self.wfile.write(TEMPLATE_START.encode('utf8'))
-				self.wfile.write(months_to_html(monthly, date).encode('utf8'))
 				titleBox = """<div class="toot box"><h1>%s</h1></div>\n""" % dateparsed.strftime("%B %Y")
 				self.wfile.write(titleBox.encode('utf8'))
+				self.wfile.write(months_to_html(monthly, date).encode('utf8'))
 				toots_to_html(monthly[date], actor, self.wfile)
 				body = TEMPLATE % {"body": body}
 
