@@ -17,7 +17,7 @@ pip install -r requirements.txt
 
 Then place mastodon-data-viewer.py in your extracted mastodon data directory (the folder with actor.json/outbox.json) and run it.
 
-## Screenshot
+## Screenshots
 
 ![Screenshot](screenshot.png?raw=true)
 
