@@ -10,6 +10,15 @@ import socketserver
 from urllib.parse import urlparse
 from urllib.parse import parse_qs
 
+# todo: polls
+# todo: better link icon
+
+LINK_ICON = """<svg xmlns="http://www.w3.org/2000/svg" width="16.25" height="16.495" viewBox="0 0 4.3 4.364"><path d="M4.3 0L3.016.383l.29.273L1.132 2.96l.395.373 2.173-2.301.29.273zM1.273.18A1.277 1.277 0 000 1.454V3.09a1.276 1.276 0 001.273 1.273h1.674A1.277 1.277 0 004.22 3.091V1.944h-.544V3.09a.72.72 0 01-.73.729H1.274a.72.72 0 01-.728-.729V1.454a.72.72 0 01.728-.728h1.281V.18H1.273z" color="#555"/></svg>"""
+
+DM_ICON = """<svg xmlns="http://www.w3.org/2000/svg" width="16.25" height="16.495" viewBox="0 0 4.3 4.364"><path d="M1.02.31a.921.921 0 00-.876.666l1.999 1.155L4.172.958A.922.922 0 003.3.31H1.02zm3.198 1.202L2.143 2.711.103 1.533v1.602c0 .502.415.916.918.916H3.3a.922.922 0 00.917-.916V1.512z" color="#000"/></svg>"""
+
+REPLY_ICON = """<svg xmlns="http://www.w3.org/2000/svg" width="16.25" height="16.495" viewBox="0 0 4.3 4.364"><path d="M2.089 2.789v-.725c2.434 0-.28 1.516-1.519 1.97 2.26 0 6.146-3.08 1.519-3.08V.26L.136 1.47z"/></svg>"""
+
 TEMPLATE = """
 <html>
 <head>
@@ -27,6 +36,11 @@ body {
   border-radius: 5px;
   box-shadow: 0px 2px 5px grey;
   padding: 10px;
+}
+
+h1 {
+	text-align: center;
+	width: 100%%;
 }
 
 .dates {
@@ -64,39 +78,28 @@ body {
 }
 
 .monthbar {
-  
   height: 60px;
   border-radius: 4px;
   margin-bottom: 5px;
-  background: #BCF;
+  background: #d1f1eb;
   display: block;
   overflow: hidden;
   position: relative;
+  box-sizing: border-box;
+}
+
+.monthbar.selected {
+	border: 2px solid black;
 }
 
 .fill {
-  background: #359;
+  background: #3d9da9;
   position: absolute;
-  border-radius: 4px;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 1;
-}
-span.monthcount {
-  z-index: 2;
-  color: white;
-  font-weight: bold;
-  position: absolute;
-  display: block;
-  text-align: center;
-  padding-top: 10px;
+  border-radius: 2px;
   bottom: 0;
   left: 0;
   right: 0;
   top: 0;
-  text-shadow: 0px 0px 4px black;
-  font-size: 14px;
 }
 
 .toot {
@@ -116,6 +119,11 @@ span.monthcount {
 
 span.at {
   color: #555;
+}
+
+span.postdate {
+  color: #555;
+	font-size: 11px;
 }
 
 img.avatar {
@@ -155,10 +163,27 @@ audio.image {
 .image:last-child {
   margin-right: 0px;
 }
+
+.hidden {
+	display: none;
+}
+
+.icon {
+	float: right;
+	margin-left: 5px;
+}
 </style>
 </head>
 <body>
 %(body)s
+<script>
+var buttons = document.querySelectorAll("button.showmore")
+Array.prototype.forEach.call(buttons, function(button) {
+    button.onclick = function() {
+        button.parentNode.nextElementSibling.classList.toggle('hidden');
+    }
+});
+</script>
 </body>
 </html>
 """
@@ -176,12 +201,13 @@ def months_to_html(monthly, selected):
 			parseddate = datetime.datetime.strptime(date, "%Y-%m-%d")
 			count = len(monthly[date])
 			percent = 100 - count/maximum * 100
+			selectedclass = "selected" if selected == date else ""
 			months += """<div class="month">
-<a title="%(monthname)s" href="/?date=%(date)s" class="monthbar">
+<a title="%(monthname)s" href="/?date=%(date)s" class="monthbar %(selected)s">
 <div class="fill" style="top:%(percent)d%%;"></div>
 </a>
 %(count)d
-</div>""" % {"monthname": parseddate.strftime("%B"), "date": date, "count": count, "percent": percent}
+</div>""" % {"monthname": parseddate.strftime("%B"), "date": date, "count": count, "percent": percent, "selected": selectedclass}
 
 		years += """<div class="year">
 <span class="title">%(year)d</span>
@@ -204,28 +230,66 @@ def toots_to_html(toots):
 				images += """<audio controls class="image"><source src="%(href)s" type="%(type)s"></audio>""" % {"data": str(attachment), "href": attachment["url"], "type": attachment["mediaType"]}
 			else:
 				images += """<a alt="bep" title="bep" class="image" href="%(href)s" target="_blank" style="background: url('%(href)s')" ></a>""" % {"href": attachment["url"]}
+		date = dateutil.parser.isoparse(toot["published"])
+		postdate = date.strftime("%a, %d %b %Y %I:%M:%S %p")
+		content =  """%(content)s
+<div class="images">
+%(images)s
+</div>""" % {"content": toot["content"], "images": images}
+		if toot["sensitive"]:
+			content =  """<p>%(summary)s <button class="showmore">show more</button></p>
+<div class="collapsible hidden">
+%(content)s
+</div>""" % {"summary": toot["summary"], "content": content}
 
+		icons = """<a class="icon" href="%(url)s" target="_blank">%(icon)s</a>""" % {"url": toot["url"], "icon": LINK_ICON}
+		if "directMessage" in toot and toot["directMessage"]:
+			icons += """<a class="icon" title="direct message">%s</a>""" % DM_ICON
+		if "inReplyTo" in toot and toot["inReplyTo"] is not None:
+			icons += """<a class="icon" title="reply">%s</a>""" % REPLY_ICON
 		line = """<div class="toot box"><!-- %(data)s -->
 <div class="avatar">
 <img class="avatar" src="./avatar.png" />
-<a href="%(url)s" target="_blank">Link</a>
 </div>
 <div class="content">
-<b>talkative fishy</b> <span class="at">@blackle</span>
+%(icons)s
+<b>talkative fishy</b> <span class="at">@blackle</span><br/>
+<span class="postdate">%(postdate)s</span>
 %(content)s
-<div class="images">
-%(images)s
 </div>
-</div>
-</div>""" % {"data": str(toot), "url": toot["url"], "content": toot["content"], "images": images}
+</div>""" % {"data": str(toot), "content": content, "postdate": postdate, "icons": icons}
 		lines += line
 		# file.write(line.encode('utf8'))
 	return lines
 
+def load_toots():
+	toots = {}
+	with open('outbox.json', 'rb') as f:
+		j = bigjson.load(f)
+		totalItems = j["totalItems"]
+		allItems = j["orderedItems"]
+		print("Loading toots for the first time")
+		for i in tqdm(range(totalItems)):
+			item = allItems[i]
+			if (item["type"] != "Create"):
+				continue
+			obj = item["object"].to_python()
+			toots[obj["id"]] = obj
+	pickle.dump(toots, open("toots.pk", "wb"))
+	return toots
+
 def main():
 
-	toots = pickle.load( open( "toots.pk", "rb" ) )
-	monthly = pickle.load( open( "monthly.pk", "rb" ) )
+	try:
+		toots = pickle.load(open("toots.pk", "rb"))
+	except:
+		toots = load_toots()
+	monthly = defaultdict(list)
+	# bin the toots into months
+	for key, toot in toots.items():
+		date = dateutil.parser.isoparse(toot["published"])
+		date = datetime.date(year=date.year, month=date.month, day=1)
+		monthly[str(date)].append(toot)
 
 	class MyHttpRequestHandler(http.server.SimpleHTTPRequestHandler):
 		def do_GET(self):
@@ -236,11 +300,13 @@ def main():
 				self.end_headers()
 				monthkeys = sorted(monthly.keys())
 				date = monthkeys[0]
-				query_components = parse_qs(urlparse(self.path).query)
+				query_components = parse_qs(parsedpath.query)
 				if "date" in query_components:
 					date = query_components["date"][0]
+				dateparsed = datetime.datetime.strptime(date, "%Y-%m-%d")
 
 				body = months_to_html(monthly, date)
+				body += """<div class="toot box"><h1>%s</h1></div>\n""" % dateparsed.strftime("%B %Y")
 				body += toots_to_html(monthly[date])
 				body = TEMPLATE % {"body": body}
 
@@ -250,33 +316,8 @@ def main():
 
 	PORT = 8001
 	print("port:",PORT)
-	# handler = MyHttpRequestHandler(toots, monthly)
-	my_server = socketserver.TCPServer(("", PORT), MyHttpRequestHandler)
-	# Star the server
-	my_server.serve_forever()
-
-	# toots = {}
-	# monthly = defaultdict(list)
-	# # whitelist_keys = ["id", "type", "summary", "inReplyTo", "published", "url", "sensitive", "content", "directMessage", "endTime", "closed", "oneOf"]
-	# with open('outbox.json', 'rb') as f:
-	# 	j = bigjson.load(f)
-	# 	totalItems = j["totalItems"]
-	# 	allItems = j["orderedItems"]
-	# 	print("Loading all items into memory")
-	# 	for i in tqdm(range(totalItems)):
-	# 		item = allItems[i]
-	# 		if (item["type"] != "Create"):
-	# 			continue
-	# 		obj = item["object"].to_python()
-	# 		toots[obj["id"]] = obj #{ key: obj[key] for key in whitelist_keys if key in obj }
-	# 		date = dateutil.parser.isoparse(obj["published"])
-	# 		date = datetime.date(year=date.year, month=date.month, day=1)
-	# 		monthly[str(date)].append(obj)
-	# months = sorted(monthly.keys(), reverse=True)
-	# for month in months:
-	# 	print(month, len(monthly[month]))
-	# pickle.dump( monthly, open( "monthly.pk", "wb" ) )
-	# pickle.dump( toots, open( "toots.pk", "wb" ) )
+	server = socketserver.TCPServer(("", PORT), MyHttpRequestHandler)
+	server.serve_forever()
 
 if __name__ == "__main__":
 	main()
