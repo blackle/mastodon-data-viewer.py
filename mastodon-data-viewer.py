@@ -416,7 +416,7 @@ def main():
 	monthly = defaultdict(list)
 	# bin the toots into months
 	for key, toot in toots.items():
-		date = dateutil.parser.isoparse(toot["published"])
+		date = dateutil.parser.isoparse(toot["published"]).astimezone()
 		date = datetime.date(year=date.year, month=date.month, day=1)
 		monthly[str(date)].append(toot)
 	monthkeys = sorted(monthly.keys())
