@@ -3,6 +3,7 @@ import bigjson
 from tqdm import tqdm
 import dateutil.parser
 import datetime
+import re
 from collections import defaultdict
 import pickle
 import http.server
@@ -249,12 +250,35 @@ body.dark .pollmeta, body.dark span.at, body.dark span.postdate {
 .cw p {
 	margin-top: 0px;
 }
+
+.searchbar {
+    width: 100%;
+    margin: 0;
+    box-sizing: border-box;
+    border-radius: 10px;
+    padding: 5px 10px;
+    font-size: 20px;
+}
+
+form {
+    width: 100%;
+    box-sizing: border-box;
+}
 </style>
 </head>"""
 
 TEMPLATE_END = """</body>
 </html>
 """
+
+def search_bar_html(darkmode, searchtext):
+	darkmodestr = "yes" if darkmode else "no"
+	return """<div class="search toot box">
+	<form action="/" method="GET">
+		<input type="input" name="search" class="searchbar" placeholder="search" value="%(searchtext)s">
+		<input type="hidden" name="dark" value="%(darkmodestr)s">
+	</form>
+</div>""" % vars()
 
 def months_to_html(monthly, selected, darkmode, query_components):
 	monthkeys = sorted(monthly.keys())
@@ -273,6 +297,8 @@ def months_to_html(monthly, selected, darkmode, query_components):
 			selectedclass = "selected" if selected == date else ""
 			query_copy = query_components.copy()
 			query_copy["date"] = [date]
+			if "search" in query_copy:
+				del query_copy["search"]
 			url = "/?" + urlencode(query_copy, doseq=True)
 			months += """<div class="month">
 <a title="%(monthname)s" href="%(url)s" class="monthbar %(selectedclass)s">
@@ -297,19 +323,19 @@ def months_to_html(monthly, selected, darkmode, query_components):
 
 	return """<div class="dates box">%s</div>""" % years
 
-def poll_to_html(toot):
-	pollobj = None
-	polltype = ""
+def get_poll_type(toot):
 	if "anyOf" in toot:
-		pollobj = toot["anyOf"]
-		polltype = "multiple choice"
+		return "anyOf", toot["anyOf"]
 	if "oneOf" in toot:
-		pollobj = toot["oneOf"]
-		polltype = "single choice"
-	if pollobj is None:
-		return ""
+		return "oneOf", toot["oneOf"]
+	return None, None
 
+def poll_to_html(toot):
+	polltype, pollobj = get_poll_type(toot)
 	poll = ""
+	if polltype is None:
+		return poll
+	polltype = {"oneOf": "single choice", "anyOf": "multiple choice"}[polltype]
 
 	voteCount = 0
 	for pollitem in pollobj:
@@ -404,6 +430,21 @@ def load_toots(actor):
 	pickle.dump(toots, open("toots.pk", "wb"))
 	return toots
 
+def search_text_in_toot(toot, searchtext):
+	searchregex = re.compile(r"\b" + searchtext + r"\b")
+	def check_key(key):
+		return toot[key] is not None and searchregex.search(toot[key])
+	if check_key("content") or check_key("summary"):
+		return True
+	polltype, pollobj = get_poll_type(toot)
+	if polltype is not None:
+		for pollitem in pollobj:
+			if searchregex.search(pollitem["name"]):
+				return True
+	for attachment in toot["attachment"]:
+		if attachment["name"] is not None and searchregex.search(attachment["name"]):
+			return True
+
 def main():
 	with open('actor.json', 'rb') as f:
 		j = bigjson.load(f)
@@ -414,6 +455,7 @@ def main():
 	except:
 		toots = load_toots(actor)
 	monthly = defaultdict(list)
+
 	# bin the toots into months
 	for key, toot in toots.items():
 		date = dateutil.parser.isoparse(toot["published"]).astimezone()
@@ -428,24 +470,42 @@ def main():
 				self.send_response(200)
 				self.send_header("Content-type", "text/html")
 				self.end_headers()
-				date = monthkeys[-1]
 				query_components = parse_qs(parsedpath.query)
 				darkmode = "dark" in query_components and query_components["dark"][0] == "yes"
-				print(query_components)
+				search = "search" in query_components
+				date = None
+				searchtext = ""
+				if search:
+					searchtext = query_components["search"][0]
+				elif "date" in query_components:
+					date = query_components["date"][0]
+				else:
+					date = monthkeys[-1]
+
 				bodytag = "<body>"
 				if darkmode:
 					bodytag = "<body class=\"dark\">"
-				if "date" in query_components:
-					date = query_components["date"][0]
-				dateparsed = datetime.datetime.strptime(date, "%Y-%m-%d")
 
 				self.wfile.write(TEMPLATE_START.encode('utf8'))
 				self.wfile.write(bodytag.encode('utf8'))
-				titleBox = """<div class="toot box"><h1>%s</h1></div>\n""" % dateparsed.strftime("%B %Y")
-				self.wfile.write(titleBox.encode('utf8'))
+				self.wfile.write(search_bar_html(darkmode, searchtext).encode('utf8'))
+				if search:
+					titleBox = """<div class="toot box"><h1>Search results for: <i>%s</i></h1></div>\n""" % searchtext
+					self.wfile.write(titleBox.encode('utf8'))
+				else:
+					dateparsed = datetime.datetime.strptime(date, "%Y-%m-%d")
+					titleBox = """<div class="toot box"><h1>%s</h1></div>\n""" % dateparsed.strftime("%B %Y")
+					self.wfile.write(titleBox.encode('utf8'))
 				self.wfile.write(months_to_html(monthly, date, darkmode, query_components).encode('utf8'))
-				if date in monthly:
-					toots_to_html(monthly[date], actor, self.wfile)
+				results = []
+				if search:
+					for key in toots:
+						toot = toots[key]
+						if search_text_in_toot(toot, searchtext):
+							results.append(toot)
+				elif date in monthly:
+					results = monthly[date]
+				toots_to_html(results, actor, self.wfile)
 
 				self.wfile.write(TEMPLATE_END.encode('utf8'))
 				return
