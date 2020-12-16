@@ -1,6 +1,6 @@
 # mastodon-data-viewer.py
 
-A viewer for mastodon data written in python. It creates a local server that you can use to browse the data. Designed for large (>40,000) toot archives. Support full text search and the following post content:
+A viewer for mastodon data written in python. It creates a local server that you can use to browse the data. Designed for large (>40,000) toot archives. Supports full text search and the following post content:
 
 * Content warnings
 * Image attachments
