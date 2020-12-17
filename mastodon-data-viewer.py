@@ -430,6 +430,15 @@ def load_toots(actor):
 	pickle.dump(toots, open("toots.pk", "wb"))
 	return toots
 
+def bin_monthly(toots):
+	monthly = defaultdict(list)
+	# bin the toots into months
+	for toot in toots:
+		date = dateutil.parser.isoparse(toot["published"]).astimezone()
+		date = datetime.date(year=date.year, month=date.month, day=1)
+		monthly[str(date)].append(toot)
+	return monthly
+
 def search_text_in_toot(toot, searchtext):
 	searchregex = re.compile(r"\b" + searchtext + r"\b")
 	def check_key(key):
@@ -454,13 +463,7 @@ def main():
 		toots = pickle.load(open("toots.pk", "rb"))
 	except:
 		toots = load_toots(actor)
-	monthly = defaultdict(list)
-
-	# bin the toots into months
-	for key, toot in toots.items():
-		date = dateutil.parser.isoparse(toot["published"]).astimezone()
-		date = datetime.date(year=date.year, month=date.month, day=1)
-		monthly[str(date)].append(toot)
+	monthly = bin_monthly(toots.values())
 	monthkeys = sorted(monthly.keys())
 
 	class MyHttpRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -486,6 +489,17 @@ def main():
 				if darkmode:
 					bodytag = "<body class=\"dark\">"
 
+				monthbins = monthly
+				results = []
+				if search:
+					for key in toots:
+						toot = toots[key]
+						if search_text_in_toot(toot, searchtext):
+							results.append(toot)
+					if len(results) > 1:
+						monthbins = bin_monthly(results)
+				elif date in monthly:
+					results = monthly[date]
 				self.wfile.write(TEMPLATE_START.encode('utf8'))
 				self.wfile.write(bodytag.encode('utf8'))
 				self.wfile.write(search_bar_html(darkmode, searchtext).encode('utf8'))
@@ -496,15 +510,7 @@ def main():
 					dateparsed = datetime.datetime.strptime(date, "%Y-%m-%d")
 					titleBox = """<div class="toot box"><h1>%s</h1></div>\n""" % dateparsed.strftime("%B %Y")
 					self.wfile.write(titleBox.encode('utf8'))
-				self.wfile.write(months_to_html(monthly, date, darkmode, query_components).encode('utf8'))
-				results = []
-				if search:
-					for key in toots:
-						toot = toots[key]
-						if search_text_in_toot(toot, searchtext):
-							results.append(toot)
-				elif date in monthly:
-					results = monthly[date]
+				self.wfile.write(months_to_html(monthbins, date, darkmode, query_components).encode('utf8'))
 				toots_to_html(results, actor, self.wfile)
 
 				self.wfile.write(TEMPLATE_END.encode('utf8'))
