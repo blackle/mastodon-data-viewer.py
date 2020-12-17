@@ -440,7 +440,7 @@ def bin_monthly(toots):
 	return monthly
 
 def search_text_in_toot(toot, searchtext):
-	searchregex = re.compile(r"\b" + searchtext + r"\b")
+	searchregex = re.compile(r"\b" + searchtext + r"\b", flags=re.I)
 	def check_key(key):
 		return toot[key] is not None and searchregex.search(toot[key])
 	if check_key("content") or check_key("summary"):
