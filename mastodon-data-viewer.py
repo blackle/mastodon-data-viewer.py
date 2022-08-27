@@ -418,16 +418,16 @@ def load_toots(actor):
 	toots = {}
 	with open(actor["outbox"], 'rb') as f:
 		j = bigjson.load(f)
-		totalItems = j["totalItems"]
-		allItems = j["orderedItems"]
 		print("Loading toots for the first time")
-		for i in tqdm(range(totalItems)):
-			item = allItems[i]
+		t = tqdm(total=0, unit="toots")
+		for item in j["orderedItems"]:
 			if (item["type"] != "Create"):
 				continue
 			obj = item["object"].to_python()
 			toots[obj["id"]] = obj
+			t.update()
 	pickle.dump(toots, open("toots.pk", "wb"))
+	t.close()
 	return toots
 
 def bin_monthly(toots):
