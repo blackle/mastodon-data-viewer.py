@@ -400,7 +400,7 @@ def toots_to_html(toots, actor, file):
 		if "directMessage" in toot and toot["directMessage"]:
 			icons += """<a class="icon" title="direct message">%s</a>""" % DM_ICON
 		if "inReplyTo" in toot and toot["inReplyTo"] is not None:
-			icons += """<a class="icon" title="reply">%s</a>""" % REPLY_ICON
+			icons += """<a class="icon" href="%(url)s" title="reply">%(icon)s</a>""" % {"url": toot["inReplyTo"], "icon": REPLY_ICON}
 		line = """<div class="toot box"><!-- %(datastr)s -->
 <div class="avatar">
 <img class="avatar" src="%(avatar)s" />
