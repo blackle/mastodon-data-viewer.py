@@ -521,7 +521,11 @@ def main():
 		pass
 
 	PORT = 8000
-	print("port:",PORT)
+	print("""
+	Mastodon-data-viewer is now running.
+	Open http://localhost:%d/ in a web browser to view your archive.
+	Press ctrl+c in this window to stop the application.
+	""" % PORT)
 	socketserver.TCPServer.allow_reuse_address = True
 	server = ThreadingSimpleServer(("", PORT), MyHttpRequestHandler)
 	server.serve_forever()
