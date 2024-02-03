@@ -468,7 +468,7 @@ def main():
 	parser.add_argument("--port", "-p", default=DEFAULT_PORT, type=int, help="Port number for the web server")
 	parser.add_argument("--archive", "-a", default=DEFAULT_ARCHIVE_PATH, help="Path to Mastodon's outbox.json and actor.json")
 	parser.add_argument("--cache", "-c", default="./", help="Path where the cache files will be stored")
-	parser.add_argument("--rebuild", "-r", default=False, help="Rebuilds the toots.pk cache file")
+	parser.add_argument("--force-update", "-r", default=False, help="Forces rebuild of the toots.pk cache file")
 	parser.add_argument("--dont-update", "-u", default=False, help="Does not update the toots cache with data files", action='store_true')
 	args = parser.parse_args()
 
@@ -491,7 +491,7 @@ def main():
 	with open(outbox_path, 'rb') as f:
 		new_hash = hashlib.sha256(f.read()).hexdigest()
 
-	if path.isfile(toots_path) and path.isfile(hash_path) and not args.rebuild:
+	if path.isfile(toots_path) and path.isfile(hash_path) and not args.force_update:
 		with open(toots_path, "rb") as f:
 			toots = pickle.load(f)
 		with open(hash_path, "r") as f:
