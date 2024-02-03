@@ -468,8 +468,9 @@ def main():
 	parser.add_argument("--port", "-p", default=DEFAULT_PORT, type=int, help="Port number for the web server")
 	parser.add_argument("--archive", "-a", default=DEFAULT_ARCHIVE_PATH, help="Path to Mastodon's outbox.json and actor.json")
 	parser.add_argument("--cache", "-c", default="./", help="Path where the cache files will be stored")
-	parser.add_argument("--force-update", "-r", default=False, help="Forces rebuild of the toots.pk cache file")
+	parser.add_argument("--force-update", "-r", default=False, help="Forces rebuild of the toots.pk cache file", action='store_true')
 	parser.add_argument("--dont-update", "-u", default=False, help="Does not update the toots cache with data files", action='store_true')
+	parser.add_argument("--use-outbox", "-o", default=False, help="Uses outbox.json file regardless of the contents of actor.json", action='store_true')
 	args = parser.parse_args()
 
 	if not path.isdir(args.archive):
@@ -477,16 +478,27 @@ def main():
 	if not path.isdir(args.cache):
 		os.mkdir(args.cache)
 
+	save_cache = False
+
+	toots_path = path.join(args.cache, "toots.pk")
+	if args.use_outbox:
+		outbox_path = path.join(args.archive, "outbox.json")
+	actor_path = path.join(args.archive, "actor.json")
+	hash_path = path.join(args.cache, "hash.sha256")
+	delta = 0
+
+	for p in [actor_path, outbox_path]:
+		if path.isfile(p):
+			continue
+		print("Failed to find \"{}\"".format(p))
+		exit(1)
+
 	with open(path.join(args.archive, "actor.json"), 'rb') as f:
 		j = bigjson.load(f)
 		actor = j.to_python()
 
-	save_cache = False
-
-	toots_path = path.join(args.cache, "toots.pk")
-	outbox_path = path.join(args.archive, "outbox.json")
-	hash_path = path.join(args.cache, "hash.sha256")
-	delta = 0
+	if not args.use_outbox:
+		outbox_path = path.join(args.archive, actor["outbox"])
 
 	with open(outbox_path, 'rb') as f:
 		new_hash = hashlib.sha256(f.read()).hexdigest()
@@ -519,7 +531,7 @@ def main():
 		with open(hash_path, "w") as f:
 			f.write(new_hash)
 		print("OK!")
-		print("{} posts {}".format(abs(delta), "added" if delta >= 0 else "removed"))
+		print("{} toots {}".format(abs(delta), "added" if delta >= 0 else "removed"))
 		
 	monthly = bin_monthly(toots.values())
 	monthkeys = sorted(monthly.keys())
