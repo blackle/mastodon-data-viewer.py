@@ -12,6 +12,14 @@ from urllib.parse import urlparse
 from urllib.parse import parse_qs
 from urllib.parse import urlencode
 import threading
+import argparse
+import os
+from os import path
+import hashlib
+
+DEFAULT_HOST 			= "localhost"
+DEFAULT_PORT 			= 8000
+DEFAULT_ARCHIVE_PATH	= "./"
 
 LINK_ICON = """<svg xmlns="http://www.w3.org/2000/svg" width="16.25" height="16.495" viewBox="0 0 4.3 4.364"><path d="M4.298.028L2.74.492l.43.368-2.039 2.1.395.373 2.002-2.105.393.382zM1.273.18A1.277 1.277 0 000 1.454V3.09c.002.702.57 1.271 1.273 1.273h1.674A1.277 1.277 0 004.22 3.091V1.944h-.544V3.09a.72.72 0 01-.73.729H1.274a.72.72 0 01-.728-.729V1.454a.72.72 0 01.728-.728h1.281V.18z" color="#000"/></svg>"""
 
@@ -414,11 +422,10 @@ def toots_to_html(toots, actor, file):
 </div>""" % vars()
 		file.write(line.encode('utf8'))
 
-def load_toots(actor):
+def load_toots(outbox_path):
 	toots = {}
-	with open(actor["outbox"], 'rb') as f:
+	with open(outbox_path, 'rb') as f:
 		j = bigjson.load(f)
-		print("Loading toots for the first time")
 		t = tqdm(total=0, unit="toots")
 		for item in j["orderedItems"]:
 			if (item["type"] != "Create"):
@@ -426,8 +433,8 @@ def load_toots(actor):
 			obj = item["object"].to_python()
 			toots[obj["id"]] = obj
 			t.update()
-	pickle.dump(toots, open("toots.pk", "wb"))
-	t.close()
+		t.close()
+
 	return toots
 
 def bin_monthly(toots):
@@ -455,14 +462,65 @@ def search_text_in_toot(toot, searchtext):
 			return True
 
 def main():
-	with open('actor.json', 'rb') as f:
+	parser = argparse.ArgumentParser(description = "A viewer for mastodon export data")
+
+	parser.add_argument("--hostname", "-n", default=DEFAULT_HOST, help="Hostname for the web server")
+	parser.add_argument("--port", "-p", default=DEFAULT_PORT, type=int, help="Port number for the web server")
+	parser.add_argument("--archive", "-a", default=DEFAULT_ARCHIVE_PATH, help="Path to Mastodon's outbox.json and actor.json")
+	parser.add_argument("--cache", "-c", default="./", help="Path where the cache files will be stored")
+	parser.add_argument("--rebuild", "-r", default=False, help="Rebuilds the toots.pk cache file")
+	parser.add_argument("--dont-update", "-u", default=False, help="Does not update the toots cache with data files", action='store_true')
+	args = parser.parse_args()
+
+	if not path.isdir(args.archive):
+		os.mkdir(args.archive)
+	if not path.isdir(args.cache):
+		os.mkdir(args.cache)
+
+	with open(path.join(args.archive, "actor.json"), 'rb') as f:
 		j = bigjson.load(f)
 		actor = j.to_python()
 
-	try:
-		toots = pickle.load(open("toots.pk", "rb"))
-	except:
-		toots = load_toots(actor)
+	save_cache = False
+
+	toots_path = path.join(args.cache, "toots.pk")
+	outbox_path = path.join(args.archive, "outbox.json")
+	hash_path = path.join(args.cache, "hash.sha256")
+	delta = 0
+
+	with open(outbox_path, 'rb') as f:
+		new_hash = hashlib.sha256(f.read()).hexdigest()
+
+	if path.isfile(toots_path) and path.isfile(hash_path) and not args.rebuild:
+		with open(toots_path, "rb") as f:
+			toots = pickle.load(f)
+		with open(hash_path, "r") as f:
+			current_hash = f.read()
+
+		if new_hash != current_hash and not args.dont_update:
+			new_toots = load_toots(outbox_path)
+			save_cache = (new_toots != toots)
+			if save_cache:
+				print("Updating toots cache")
+				delta = len(new_toots) - len(toots)
+				toots = new_toots
+	else:
+		print("Building toots cache", end="")
+		toots = load_toots(outbox_path)
+		delta = len(toots)
+		save_cache = True
+	
+	if save_cache:
+		print("Saving toots cache on \"{}\"...".format(toots_path), end="", flush=True)
+		with open(toots_path, "wb") as f:
+			pickle.dump(toots, f)
+		print("OK!")
+		print("Saving hash file on \"{}\"...".format(hash_path), end="", flush=True)
+		with open(hash_path, "w") as f:
+			f.write(new_hash)
+		print("OK!")
+		print("{} posts {}".format(abs(delta), "added" if delta >= 0 else "removed"))
+		
 	monthly = bin_monthly(toots.values())
 	monthkeys = sorted(monthly.keys())
 
@@ -520,14 +578,13 @@ def main():
 	class ThreadingSimpleServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 		pass
 
-	PORT = 8000
 	print("""
 	Mastodon-data-viewer is now running.
-	Open http://localhost:%d/ in a web browser to view your archive.
+	Open http://{}:{}/ in a web browser to view your archive.
 	Press ctrl+c in this window to stop the application.
-	""" % PORT)
+	""".format(args.hostname, args.port))
 	socketserver.TCPServer.allow_reuse_address = True
-	server = ThreadingSimpleServer(("", PORT), MyHttpRequestHandler)
+	server = ThreadingSimpleServer((args.hostname, args.port), MyHttpRequestHandler)
 	server.serve_forever()
 
 if __name__ == "__main__":
